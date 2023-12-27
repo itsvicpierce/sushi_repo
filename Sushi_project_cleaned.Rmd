@@ -1,0 +1,131 @@
+---
+title: "Sushi_Project"
+author: "VP"
+date: "2023-12-27"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+---
+title: "VP Project"
+author: "VP"
+date: "2023-12-21"
+output: html_document
+---
+
+```{r}
+
+#install.packages("rvest")
+
+library(tidyverse)
+library(rvest)
+
+link <- "https://yamazarusouthend.com/charlotte-yamazaru-food-menu"
+menu <- read_html(link)
+
+```
+
+```{r}
+mennyitems <- menu %>% html_elements("h3") %>%
+  html_text2()
+
+descrip<- menu %>% html_elements(".food-item-description") %>%
+  html_text()
+
+menusection<- menu %>% html_elements("h2") %>%
+  html_text()
+
+price<- menu %>% html_elements(".food-price") %>%
+  html_text()
+
+(vpmenu <- cbind(mennyitems, descrip, price))
+
+menusection2 <- c(rep("Appetizers", 33), 
+                  rep("Salads", 10), 
+                  rep("Ramen", 3), 
+                  rep("Fried Rice", 5), 
+                  rep("Soup", 3), 
+                  rep("Rice Bowl", 5), 
+                  rep("Side Items", 5), 
+                  rep("Yakisoba", 4), 
+                  rep("Sushi Rice Bowl", 4),
+                  rep("Nigiri", 20),
+                  rep("Classic Maki", 5),
+                  rep("Moriawase", 6), 
+                  rep("American Classic Roll", 11),
+                  rep("Specialty Roll", 30),
+                  rep("Dessert", 4))
+
+cbind(menusection2, vpmenu)-> vpmenu
+
+
+
+vpmenu <- as.data.frame(vpmenu) |> 
+  mutate(descrip= ifelse(descrip== "", mennyitems, descrip),
+         descrip= str_to_title(descrip))
+
+#New Variables w Proteins/ Raw
+vpmenu |> 
+  mutate(Contains= case_when(
+    (str_detect(descrip, "Crab|Tuna|Salmon|Sash|Octopus|Yellowtail|Calamari|Shima|Urchin|Tekka|Sake|Negi|Scorpion|Pcs|Squid|Eel|Ikura|Hamachi|Roe|Fish|Mackerel|Clam|Conch|Snapper|Shrimp|Scallops|Seafood")~ "Seafood"),
+    str_detect(descrip, "Chicken")~ "Chicken",
+    str_detect(descrip, "Beef")~ "Beef",
+    str_detect(descrip, "Pork")~ "Pork",
+    str_detect(descrip, "Tofu")~ "Tofu",
+    str_detect(mennyitems, "Roll")~ "Seafood",
+    TRUE~ "Veggie")) |> 
+  mutate(Any_Raw_Items= case_when(
+    (str_detect(mennyitems, "[*]")~ "Yes"),
+    TRUE~ "No"))->vpmenu
+
+#Double Checking Items Assigned Veggie
+vpmenu |> 
+  filter(Contains == "Veggie")-> veg
+
+
+#seperating item description into ingredient columns
+vpmenu |>
+  separate(descrip, into= c("Ingredient1", "Ingredient2", "Ingredient3", "Ingredient4", "Ingredient5", "Ingredient6", "Ingredient7", "Ingredient8", "Ingredient9", "Ingredient10", "Ingredient11"),
+           sep=",|With|Over|And|/|[|]")-> vpmenu
+
+#Pivot longer for tidy df
+vpmenu |> 
+  pivot_longer(!menusection2 & !mennyitems & !price & !Contains & !Any_Raw_Items , 
+               names_to= "IngredientNum", 
+               values_to = "Ingredients") |> 
+  mutate(Ingredients= str_replace(Ingredients, "[.]", ""),
+         Ingredients=str_replace(Ingredients, " *", ""),
+         Ingredients= str_to_title(Ingredients),
+         Ingredients= str_replace(Ingredients, "Dessing", "Dressing"),
+         price= as.numeric(str_remove(price, "[$]")))->vpmenu
+
+
+#Manually Fixing some stragglers
+vpmenu |> 
+  mutate(Ingredients= case_when(
+    mennyitems == "Chef's Choice Sashimi*" & IngredientNum== "Ingredient1" ~ "8 Pcs Sashimi*",
+    mennyitems == "Chef's Choice Sashimi*" & IngredientNum== "Ingredient2" ~ "12 Pcs Sashimi*",
+    mennyitems == "Chef's Choice Sashimi*" & IngredientNum== "Ingredient3" ~ "16 Pcs Sashimi*",
+    mennyitems == "Chef's Choice Sashimi*" & IngredientNum== "Ingredient4" ~ "20 Pcs Sashimi*",
+    mennyitems == "Cream Cheese Dip" & IngredientNum== "Ingredient1" ~ "Crab Sticks",
+    mennyitems == "Cream Cheese Dip" & IngredientNum== "Ingredient2" ~ "Cream Cheese",
+    mennyitems == "Cream Cheese Dip" & IngredientNum== "Ingredient3" ~ "Green Onion",
+    mennyitems == "Cream Cheese Dip" & IngredientNum== "Ingredient4" ~ "Deep Fried Wanton Skin",
+    TRUE ~ vpmenu$Ingredients)) |> 
+      mutate(price= case_when(
+        mennyitems == "Chef's Choice Sashimi*" & IngredientNum== "Ingredient1" ~ 18.00,
+        mennyitems == "Chef's Choice Sashimi*" & IngredientNum== "Ingredient2" ~ 22.00,
+        mennyitems == "Chef's Choice Sashimi*" & IngredientNum== "Ingredient3" ~ 28.00,
+        mennyitems == "Chef's Choice Sashimi*" & IngredientNum== "Ingredient4" ~ 35.00,
+        mennyitems == "Cream Cheese Dip" ~ 6.50,
+        TRUE~ vpmenu$price))-> vpmenu
+
+#Tidy df
+vpmenu |> 
+  drop_na(Ingredients)->vpmenutidy
+
+```
+
